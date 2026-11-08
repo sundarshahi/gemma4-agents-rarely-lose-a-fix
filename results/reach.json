@@ -1,0 +1,110 @@
+{
+ "e4b-s1": {
+  "failed": 63,
+  "no_edit": 6,
+  "touched_gold_file": 35,
+  "overlapped_gold_lines": 19
+ },
+ "tn-abl1-k0": {
+  "failed": 28,
+  "no_edit": 2,
+  "touched_gold_file": 23,
+  "overlapped_gold_lines": 18
+ },
+ "tn-abl1-k4": {
+  "failed": 15,
+  "no_edit": 0,
+  "touched_gold_file": 10,
+  "overlapped_gold_lines": 9
+ },
+ "tn-abl3-k4": {
+  "failed": 16,
+  "no_edit": 1,
+  "touched_gold_file": 10,
+  "overlapped_gold_lines": 9
+ },
+ "tn-abl4-n4": {
+  "failed": 16,
+  "no_edit": 0,
+  "touched_gold_file": 11,
+  "overlapped_gold_lines": 10
+ },
+ "tn-pilot-k0": {
+  "failed": 3,
+  "no_edit": 1,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot-k1": {
+  "failed": 3,
+  "no_edit": 0,
+  "touched_gold_file": 2,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot-k2": {
+  "failed": 3,
+  "no_edit": 0,
+  "touched_gold_file": 2,
+  "overlapped_gold_lines": 2
+ },
+ "tn-pilot-k3": {
+  "failed": 2,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot-k4": {
+  "failed": 4,
+  "no_edit": 0,
+  "touched_gold_file": 2,
+  "overlapped_gold_lines": 0
+ },
+ "tn-pilot-k5": {
+  "failed": 2,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot2-k0": {
+  "failed": 2,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot2-k4": {
+  "failed": 2,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 0
+ },
+ "tn-pilot2-n1": {
+  "failed": 3,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot2-n2": {
+  "failed": 3,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 0
+ },
+ "tn-pilot2-n3": {
+  "failed": 3,
+  "no_edit": 0,
+  "touched_gold_file": 2,
+  "overlapped_gold_lines": 1
+ },
+ "tn-pilot2-n4": {
+  "failed": 2,
+  "no_edit": 0,
+  "touched_gold_file": 1,
+  "overlapped_gold_lines": 0
+ },
+ "tn-pilot2-n5": {
+  "failed": 3,
+  "no_edit": 0,
+  "touched_gold_file": 2,
+  "overlapped_gold_lines": 1
+ }
+}

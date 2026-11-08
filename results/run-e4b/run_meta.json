@@ -1,0 +1,22 @@
+{
+ "config": {
+  "model": "gemma-4-e4b-it-qat-w4a16-ct",
+  "run_id": "e4b-s1",
+  "max_time_minutes": 10,
+  "max_tool_calls": 100,
+  "max_turns": 100,
+  "command_timeout_s": 120,
+  "concurrency": 8
+ },
+ "eval_config_sample": {
+  "timeout_seconds": 60,
+  "max_tool_calls": 10,
+  "max_time_minutes": 1,
+  "max_turns": 50
+ },
+ "budget": {
+  "max_time_minutes": 10.0,
+  "max_tool_calls": 100,
+  "max_turns": 100
+ }
+}

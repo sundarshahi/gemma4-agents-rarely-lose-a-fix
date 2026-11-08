@@ -1,0 +1,9 @@
+# Competition data must not be redistributed (rules 2.4.b): no task text, sample agent, traces or logs.
+results/**/agent/
+results/**/results/
+results/**/*.log
+results/smoke/
+*.pyc
+__pycache__/
+kernels/build/
+.DS_Store
