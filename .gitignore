@@ -7,3 +7,6 @@ results/smoke/
 __pycache__/
 kernels/build/
 .DS_Store
+paper/*.aux
+paper/*.log
+paper/*.out
