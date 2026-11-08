@@ -1,4 +1,8 @@
-# Had It, Lost It? Gemma 4 coding agents and the fixes they reach
+# Run the Real Tests
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24050355.svg)](https://doi.org/10.5281/zenodo.24050355)
+
+Paper (PDF, DOI): https://doi.org/10.5281/zenodo.24050355
 
 Code and derived data for the Kaggle *Gemma 4 Developer Agent* Paper Track entry by Sundar Shahi Thakuri.
 
@@ -41,3 +45,7 @@ labels (competition discussion 749803). The replayed trajectories are from
 ## License
 
 Apache-2.0.
+
+## Cite
+
+Sundar Shahi Thakuri (2026). *Run the Real Tests: Scoring every intermediate step of 345 Gemma 4 coding-agent runs.* Preprint, Zenodo. https://doi.org/10.5281/zenodo.24050355

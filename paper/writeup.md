@@ -135,7 +135,7 @@ Most agent datasets label only the final patch. We release 1,431 intermediate wo
 
 ## 8. Reproducibility
 
-Code, data and figures: https://github.com/sundarshahi/gemma4-agents-rarely-lose-a-fix (Apache-2.0). Each stage is a Kaggle notebook on the official harness: the live run with the observation hook, the log replay, the task audit, and the scoring. Three commands regenerate every number in this paper: `python analysis/analyze.py results/`, `python analysis/checks.py results/` and `python analysis/reach.py results/ results/gold_hunks.json`. The analysis scripts include self-tests.
+Paper PDF: https://doi.org/10.5281/zenodo.24050355. Code, data and figures: https://github.com/sundarshahi/gemma4-agents-rarely-lose-a-fix (Apache-2.0). Each stage is a Kaggle notebook on the official harness: the live run with the observation hook, the log replay, the task audit, and the scoring. Three commands regenerate every number in this paper: `python analysis/analyze.py results/`, `python analysis/checks.py results/` and `python analysis/reach.py results/ results/gold_hunks.json`. The analysis scripts include self-tests.
 
 **Use of AI tools.** An AI assistant (Claude) helped write code and draft text. All numbers come from the released scripts, and the author checked the analysis and the final text.
 
