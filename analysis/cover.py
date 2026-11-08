@@ -32,7 +32,7 @@ def strip(ax, y, h):
         ax.add_patch(plt.Rectangle((x0, y), x1 - x0, h, color=PASS if ok else (FAIL if ok is False else GRID), lw=0))
 
 
-def make(w, h, name, title_size, stat_size):
+def make(w, h, name, title_size, stat_size, stat):
     fig = plt.figure(figsize=(w, h), dpi=200, facecolor=SURF)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, end)
@@ -41,12 +41,11 @@ def make(w, h, name, title_size, stat_size):
     strip(ax, 1.2, 1.1)
     ax.text(end * 0.06, 8.6, 'Run the\nReal Tests', fontsize=title_size, weight='bold', color=INK,
             va='top', linespacing=1.15)
-    ax.text(end * 0.06, 3.15, 'Gemma 4 agents: a passing check from the repo\'s own tests was right 68% of the time,\nfrom the agent\'s scratch script 38%. 1,431 agent steps scored with the hidden tests.',
-            fontsize=stat_size, color=INK2, va='bottom', wrap=True)
+    ax.text(end * 0.06, 3.15, stat, fontsize=stat_size, color=INK2, va='bottom', linespacing=1.4)
     fig.savefig(out / name, dpi=200, facecolor=SURF)
     plt.close(fig)
 
 
-make(8, 4, 'cover.png', 30, 10.5)
-make(5, 5, 'thumbnail.png', 26, 8.2)
+make(8, 4, 'cover.png', 30, 10.5, "A passing check from the repo's own tests was right 68% of the time;\nfrom the agent's scratch script, 38%. 1,431 Gemma 4 agent steps scored.")
+make(5, 5, 'thumbnail.png', 30, 12, 'Repo tests: right 68%\nScratch scripts: right 38%')
 print('wrote cover.png, thumbnail.png')
