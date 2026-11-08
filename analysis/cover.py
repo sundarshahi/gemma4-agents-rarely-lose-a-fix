@@ -39,9 +39,9 @@ def make(w, h, name, title_size, stat_size):
     ax.set_ylim(0, 10)
     ax.axis('off')
     strip(ax, 1.2, 1.1)
-    ax.text(end * 0.06, 8.6, 'Gemma 4 Agents\nRarely Lose a Fix', fontsize=title_size, weight='bold', color=INK,
+    ax.text(end * 0.06, 8.6, 'Run the\nReal Tests', fontsize=title_size, weight='bold', color=INK,
             va='top', linespacing=1.15)
-    ax.text(end * 0.06, 3.15, '2 of 345 runs passed the hidden tests mid-run and then submitted a failing patch',
+    ax.text(end * 0.06, 3.15, 'Gemma 4 agents: a passing check from the repo\'s own tests was right 68% of the time,\nfrom the agent\'s scratch script 38%. 1,431 agent steps scored with the hidden tests.',
             fontsize=stat_size, color=INK2, va='bottom', wrap=True)
     fig.savefig(out / name, dpi=200, facecolor=SURF)
     plt.close(fig)
