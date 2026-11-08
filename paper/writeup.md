@@ -1,144 +1,164 @@
-# Gemma 4 Agents Rarely Lose a Fix
+# Run the Real Tests
 
-**Subtitle:** Scoring every intermediate workspace state of 345 coding-agent runs shows that small Gemma 4 agents fail by never reaching a passing patch, not by overwriting one, and that stopping at the agent's own first green test costs fixes
+**Subtitle:** Scoring every intermediate step of 345 Gemma 4 coding-agent runs: agents rarely lose a fix, often trust a wrong one, and are right twice as often when they check with the repository's own tests
+
+> **Key findings**
+>
+> - When a Gemma 4 31B agent's check passed, the hidden tests also passed **68% of the time if it ran the repository's test suite, and only 38% if it ran a script it wrote itself**. Within the same run, the repository suite was never the less reliable signal (22 runs to 0).
+> - Ending a run at the agent's first passing test **loses 13 fixes and gains none** (p = 0.0002).
+> - Agents almost never throw away a working fix: 0 of 72 E4B runs and 2 of 273 31B runs did. When 31B broke a working version, it usually put it back by itself.
+> - Most failures never reach a working fix at all. Half of the failed 31B runs edited exactly the right lines and still got it wrong.
+> - We release 1,431 intermediate agent states, each labelled pass or fail by the official hidden tests, plus the tools that produced them.
 
 ## Abstract
 
-A coding agent is scored on the patch it submits, but it edits the repository many times before that. If an agent had a correct fix at step 30 and broke it by step 60, a simple rule ("keep the last good state") could recover it. Kim et al. showed this *coherence collapse* exists for frontier agents by finding mid-run patches identical to the reference fix. We measure it for Gemma 4 with the hidden tests themselves: we record the workspace diff after every mutating tool call and score each distinct state with the competition's official verifier. The data cover the official sample agent on Gemma 4 E4B (72 valid tasks, run live) and 273 Gemma 4 31B trajectories from 17 agent configurations, rebuilt from public logs by replaying every edit with the harness's own matcher. In total we score 1,431 distinct intermediate states. Lost fixes are rare: 0 of 72 E4B runs and 2 of 273 31B runs (0.7%, 95% CI 0.2–2.6%) passed the hidden tests at some point and submitted a failing patch. 31B broke a passing state 13 times in 12 runs, but repaired it 11 times, 9 of them by reverting to the exact earlier version within a few calls. No selection rule that uses only runtime signals beats the submitted patch; picking the state at the agent's first passing test run loses 13 fixes and gains none (exact McNemar p = 0.0002), because only 48% of the 31B states its own test commands passed on also passed the hidden tests (29% for E4B). Failures are mostly never-reached fixes: 51% of failed 31B runs and 30% of failed E4B runs edited the gold patch's lines without ever producing a passing version. Code, derived per-state labels and the replay tool are released.
+A coding agent edits a repository many times before it submits a patch, but only the submitted patch is scored. We score all of the steps in between. We record the workspace after every file-changing action and run the competition's official hidden tests on each version. The data cover Gemma 4 E4B running the official sample agent on 72 valid tasks, and 273 Gemma 4 31B runs from 17 agent configurations, rebuilt from public logs. In total that is 1,431 distinct intermediate states, all scored. Three results follow. First, agents seldom lose a fix they already had (2 of 345 runs), so checkpoint-and-undo machinery has little to recover. Second, the agent's own sense that its fix works is unreliable: only 48% of 31B's passing test runs coincided with a correct workspace, and 29% for E4B. Third, the kind of check matters. A pass from the repository's own test suite was right 68% of the time, while a pass from a scratch reproduction script was right 38% of the time (Fisher p = 2×10⁻⁸). For people building small agents, the cheapest improvement is to make the agent confirm its fix with the project's real tests, and not to trust an early green result.
 
 ## 1. Introduction
 
-The competition asks how far small, local models can go as software engineering agents. Most effort in that direction goes into helping an agent *find* the right code (retrieval, code graphs) or *write* a better fix (fine-tuning, prompting). A third failure mode gets less attention: an agent that wrote a correct fix and then changed it. That failure would be cheap to fix. An agent harness already sees every edit, so it could keep a checkpoint and hand back the best one.
+Small local models struggle with multi-step software engineering, and most work on this competition tries to help the agent find the right code or write a better fix. We looked at something in between: what happens to a fix after the agent writes it.
 
-Kim et al. [1] named this failure *coherence collapse* and found it to be the largest theme among frontier-model failures that had reached the right code. Their direct evidence, five trajectories where the agent wrote a patch byte-identical to the reference and later destroyed it, is a floor: most correct patches are not byte-identical to the reference. Their models are also frontier API models, while this competition is about 2–31B models on four L4 GPUs.
+There are two reasons to look. The first is that a good fix can be lost. Kim et al. [1] found frontier agents that wrote the reference fix word for word in the middle of a run and then overwrote it. If small models did this often, a harness could keep checkpoints and return the best one, with no extra model calls. The second is that the agent decides when it is done. It writes a reproduction script, runs it, sees it pass and submits. If that signal is wrong, the agent stops too early or submits a broken patch.
 
-We ask three questions about Gemma 4:
+To measure both, we need to know whether each intermediate version is correct, not just the final one. So we ran the hidden tests on every version an agent produced.
 
-- **RQ1. How often does an agent lose a fix?** That is, how often does some intermediate workspace pass the hidden tests while the submitted patch does not?
-- **RQ2. When a passing state gets broken, what happens next?**
-- **RQ3. Can a rule that uses only what the agent knew at the time pick a better state than the one it submitted?**
+We answer three questions:
 
-The answer to RQ1 decides whether checkpoint-and-restore machinery is worth building for small agents. Our answer is no, and the data say where the effort should go instead.
-
-**Contributions.**
-
-1. **A measurement method** that scores every intermediate state of a trajectory against the hidden tests, with no change to the agent. A 60-line observation hook records the diff live; a replayer rebuilds states from existing logs.
-2. **Measurements** on 345 Gemma 4 runs across two model sizes and 18 agent configurations, with every distinct state scored (1,431 states, no sampling).
-3. **A counterfactual test of four runtime selection rules**, and a measurement of how well the agent's own test runs predict the hidden tests.
-4. **Released resources:** the hook, the replayer, the verification kernels, and per-state pass/fail labels for 67 public tasks. These are derived labels only, as the hosts allow.
+1. **How often does an agent have a working fix and then submit a broken one?**
+2. **When the agent believes its fix works, how often is it right, and does it matter what it tested with?**
+3. **Could a simple rule, using only what the agent knew at the time, pick a better version than the one it submitted?**
 
 ## 2. Related work
 
-**Where trajectories go wrong.** SWE-bench [3] made final-patch resolution the standard metric. Kim et al. [1] decompose 16,758 trajectories from seven models into search, read and edit stages against the reference patch. They find that 60–69% of capable-model failures reach and edit the correct functions, and that coherence collapse is the largest theme in that group. Gupta et al. [4] analyse 154k trajectories with solution-distance and backtracking measures. Cuadron et al. [5] show that extended internal reasoning can hurt agentic performance. Our measurement differs from [1] in one respect that matters: we run the hidden tests on every state instead of comparing states with the reference patch, so any correct patch counts.
+Kim et al. [1] split 16,758 frontier-model trajectories into search, read and edit stages and compared them with the reference patch. They report that 60–69% of failures reach and edit the right code, and they name the reach-then-overwrite pattern *coherence collapse*. We run the hidden tests on each state instead of comparing it with the reference, so any correct patch counts, and we study small open models. Gupta et al. [4] analyse backtracking in 154k trajectories, and Cuadron et al. [5] show that more reasoning can hurt agent performance.
 
-**Search and selection.** SWE-Search [6] runs Monte Carlo tree search over repository states with explicit backtracking. Agentless [7] and CodeMonkeys [8] sample several candidate patches and pick one using regression and reproduction tests. These methods choose *between* independent attempts. We study selection *within* one attempt, which costs no extra model calls. That is the cheapest place a fix could be recovered, if one were there.
+Other methods pick among patches. SWE-Search [6] searches over repository states with backtracking. Agentless [7] and CodeMonkeys [8] generate many candidate patches and use tests to choose one. They choose between separate attempts; we ask whether a choice inside one attempt helps.
 
-**This competition.** Papasani's audit [2] found that only 68 of the 129 public tasks discriminate between agents, and that 14.7% of planted bugs still pass the tests, so any "resolved" verdict, including ours, is an upper bound on correctness. Showing Gemma 31B the existing tests its patch breaks made it break 16 of 23 held-back correct patches [9], which already suggested that the agent's own test signals can mislead it. A pre-registered study examines edit-state loss at context compaction [10]. sigongjoa [11] show that a 2B agent often cannot land its edits at all. Our results connect these: small agents rarely lose fixes, and their own test signals are not reliable enough to select states with.
+Within this competition, Papasani [2] audited the public tasks and found that 14.7% of deliberately broken fixes still pass the tests. Vein05 [9] found that showing 31B the existing tests its patch breaks made it damage correct patches, a first sign that agent-side test signals mislead. A pre-registered study [10] looks at lost edits when the context is compacted, and sigongjoa [11] show that a 2B agent often cannot apply its edits at all.
 
 ## 3. Method
 
-### 3.1 Tasks and validity audit
+### 3.1 Which tasks count
 
-We use the 129 public development tasks (fastapi 67, rich 48, requests 13, httpx 1) and the official `swegemma` 0.2.11 harness with its subprocess sandbox. Before measuring agents we score every task twice with the official verifier: once with the reference patch, which should pass, and once with an empty patch, which should fail. The reference patch passes on 75 tasks and the empty patch passes on 3. That leaves **72 valid tasks** (rich 43, fastapi 29; no requests or httpx task qualifies). Our valid set contains all 68 tasks of Papasani's independent audit [2] plus four rich tasks. All results below are on valid tasks only.
+The public development set has 129 tasks. We ran the official verifier on each one twice, once with the reference fix (it should pass) and once with no change (it should fail). 72 tasks behave correctly: 43 from rich and 29 from fastapi. These include all 68 tasks from Papasani's independent audit [2]. Every result below uses only these 72.
 
-### 3.2 Agents and runs
+### 3.2 Agents
 
-**E4B, live.** We ran the official sample submission unchanged except for the model name (`gemma-4-e4b-it-qat-w4a16-ct`) on 4×L4 with vLLM. It has a root agent with six workspace tools, three graph tools and a read-only analyzer sub-agent, with temperature 0.2 and a thinking budget of 4,096. The sample's own `eval_config` allows 10 tool calls and one minute per task, too little to observe a trajectory, so we used 100 tool calls, 100 turns, 10 minutes and a 120 s command timeout. Context compaction used the official notebook's settings, with 8 tasks running at once.
+**Gemma 4 E4B, run live.** We ran the official sample submission with only the model name changed. It has the six workspace tools, the three graph tools, a code-analyzer sub-agent, temperature 0.2 and a 4,096-token thinking budget. The sample's own budget of 10 tool calls and one minute per task is too short to study, so we allowed 100 tool calls, 100 turns and 10 minutes. It ran with vLLM on four L4 GPUs.
 
-**31B, replayed.** A matching live 31B run was stopped when the weekly GPU quota ran out. Instead we use the 298 public 31B trajectories released by Papasani [2] (Apache-2.0, commit 0758ce1). They span 17 configurations (pilots and ablations over prompts and tool sets) on 67 valid tasks.
+**Gemma 4 31B, rebuilt from logs.** Our own 31B run was stopped when the weekly GPU quota ran out. Instead we used 298 public 31B runs from Papasani [2], covering 17 agent configurations on 67 of the valid tasks.
 
-### 3.3 Recording intermediate states
+### 3.3 Recording every version
 
-*Live.* We wrap the harness's `run_command`, `edit_file`, `write_file` and `submit_patch` functions. After each call the wrapper computes the workspace diff exactly as `submit_patch` does: `git add -N .` and `git diff` against the baseline tag, with test files stripped. It does this against a private copy of the git index, so the agent's own view of the repository is unchanged. It logs the diff, the call, the command's exit code and the submitted patch. Prompts, tools, budgets and sampling are untouched, and the wrapper's git calls count against no budget.
+For the live run, we wrapped the harness's file-editing, shell and submit functions. After each call, the wrapper saves the workspace diff the same way the harness computes a submission, using a private copy of git's index so the agent sees nothing different. The agent's prompts, tools and budgets are unchanged.
 
-*Replay.* For each logged trajectory we extract the task snapshot and re-apply every `edit_file` call with the harness's own `apply_replacement` matcher and every `write_file` verbatim, recording the diff after each call. The matcher is deterministic, so a replayed edit succeeds exactly when the live edit did. Shell commands that may change files (`rm`, `sed -i`, redirects into the tree, `git checkout`, inline Python writes) are re-executed in the sandbox. A trajectory is kept only if every re-executed command matched its logged success and the replayed final diff equals the patch the original run logged. 273 of 298 trajectories pass both checks. Of the 25 dropped, 24 ended on a different diff and 2 were cut short (one run failed both checks). As a check of the whole pipeline, our verdict on each kept run's final state matches its originally logged verdict in all 269 cases where both exist (E4B: 66 of 66).
+For the logged runs, we unpacked each task's repository and re-applied every edit in order with the harness's own edit-matching function, re-running any shell command that might change files. We kept a run only if every re-run command behaved as logged and the final rebuilt diff equals the patch the original run submitted. 273 of 298 runs passed both checks.
 
-### 3.4 Scoring and selection rules
+### 3.4 Scoring
 
-Every distinct non-empty diff of every kept run is scored with `verify_task`. It uses a fresh sandbox, applies the patch, resets test files, applies the hidden `test_patch`, runs pytest and checks the JUnit report. That covers 1,312 31B states and 119 E4B states. States scored more than once never disagreed. A run is **any-time resolved** if any state passes, and has a **lost fix** if it is any-time resolved but its submitted patch fails. A **break** is a step from a passing state to a failing one.
+Each distinct version was scored by the official verifier in a fresh sandbox: apply the diff, add the hidden tests, run pytest. That is 1,312 versions for 31B and 119 for E4B, with none skipped. Versions scored twice always got the same verdict. As a check on the whole pipeline, our verdict on each run's final version matched the originally logged result in every case (269 of 269 for 31B, 66 of 66 for E4B).
 
-The selection rules may use only what the agent knew at the time:
-
-| Rule | Picks |
-|---|---|
-| Submitted (harness default) | the last `submit_patch`, else the final workspace |
-| Last workspace state | the workspace when the run ended |
-| First submitted patch | the first `submit_patch` |
-| Last agent-green | the state at the agent's last test-runner command (pytest, unittest, tox, `test_*.py`) that exited 0 |
-| First agent-green | the state at its first such command |
-
-Every chosen state was actually reached and scored, so the counterfactual needs no new model calls. Each rule is compared with the submitted patch on the same runs with an exact two-sided McNemar test. Rates carry Wilson 95% intervals.
+We call a run's version **working** if it passes the hidden tests. A **check** is any command the agent runs to test its work: a test runner such as pytest, or a Python script named like repro, verify, test, check or debug. We split checks into those that run the **repository's test suite** (the `tests/` directory, or pytest with no file named) and those that run the agent's **own scratch script**.
 
 ## 4. Results
 
-### 4.1 Lost fixes are rare (RQ1)
+### 4.1 The agent's own checks are often wrong
 
-| | Runs | Distinct states per run (median) | Submitted patch resolves | Any state resolves | Lost fixes |
-|---|---|---|---|---|---|
-| E4B, live | 72 | 1 | 9 (12.5%) | 9 (12.5%) | 0 (0–5.1%) |
-| 31B, replayed | 273 | 4 | 163 (59.7%) | 165 (60.4%) | 2 (0.7%, 0.2–2.6%) |
+![Figure 1: how often a passing agent check is right](https://raw.githubusercontent.com/sundarshahi/gemma4-agents-rarely-lose-a-fix/main/paper/fig/fig3_checks.png)
 
-E4B usually makes one change and submits it; the median run has a single distinct state. A model that rarely revises cannot lose a fix by revising, and E4B never did. 31B revises more, with a median of four states, but lost a fix in only 2 of 273 runs. Even if the true rate were at the top of the interval, recovering every lost fix would add under three points to its resolve rate. Both lost fixes are on the same task (`rich_3470`), in two different configurations.
+When 31B ran a check and it passed, the workspace was actually working only part of the time. The difference between kinds of check is large:
 
-### 4.2 Breaks happen, and the agent usually undoes them (RQ2)
+| Check that passed | Workspace really working |
+|---|---|
+| 31B, repository test suite | 65 of 95 (68%) |
+| 31B, own scratch script | 323 of 847 (38%) |
+| E4B, repository test suite | 7 of 24 (29%) |
 
-31B broke a passing state 13 times across 12 runs (4.4% of runs). Eleven of the 13 breaks were repaired before the run ended. **Nine repairs were exact reverts to the earlier passing version**, usually within two tool calls; two were new passing versions. Six repairs came right after one of the agent's own checks failed (a reproduction script or pytest exiting non-zero). In practice the agent already runs a small undo loop: edit, check, put it back.
+The gap is significant (Fisher exact test, p = 2×10⁻⁸). Checks from one run are related, so we also compared the two kinds inside the same run. In the 40 runs where 31B used both, the repository suite was the more reliable signal in 22 runs, the scratch script in none, and 18 were ties.
 
-Figure 2 shows one of the two lost fixes. At call 57 the agent's edit to `rich/console.py` makes the hidden tests pass. At call 63, without running anything in between, it edits a second method and breaks it. At call 65 it runs only the scratch tests it wrote itself, which pass, and it submits. In the other lost fix the agent's check after the break did fail (exit 2), and the agent kept going without reverting. Neither case gave a runtime rule a signal it could have used. In the first the agent's own tests went green after the damage; in the second the failing check was there, and only the agent's judgement could have used it.
+The likely reason is simple. A scratch script tests the agent's own reading of the issue, so it can pass while the real requirement is still unmet. The repository's tests encode what the maintainers expect. They are not perfect either: an existing suite that passes mainly shows nothing broke, which may be why E4B's suite passes were right less often. One caution: agents may run the full suite later in a run, when the fix is already better, so part of the gap could be timing.
 
-![Figure 2](fig2_lost_fix.png)
-*Figure 2. The workspace after every call in a 31B run on `rich_3470` (configuration abl3-k4). Green: passes the hidden tests. Red: fails. Grey: no diff yet.*
+### 4.2 Trusting the first green result costs fixes
 
-### 4.3 The agent's own tests are not a reliable selector (RQ3)
+We tested four rules for picking which version to submit, using only information the agent had at that moment. Every version these rules pick was actually reached and scored, so this needs no new model runs.
 
-| Rule (31B, 273 runs) | Resolved | Lost vs submitted | Gained | p |
+| Rule (31B, 273 runs) | Runs solved | Change vs submitted |
+|---|---|---|
+| Submit what the agent submitted | 163 | — |
+| Submit the final workspace | 163 | 0 |
+| Submit the version at the last passing check | 162 | −1 |
+| Submit the version at the first passing check | 150 | −13 (p = 0.0002) |
+
+No rule did better than the agent's own submission. Stopping at the first passing check made things significantly worse, because that check is so often wrong. For E4B every rule gave the same 9 solved runs.
+
+### 4.3 Agents rarely lose a fix, and 31B fixes its own breaks
+
+| | Runs | Solved | Working at some point | Lost a working fix |
 |---|---|---|---|---|
-| Submitted (harness default) | 163 | — | — | — |
-| Last workspace state | 163 | 0 | 0 | 1.0 |
-| First submitted patch | 163 | 0 | 0 | 1.0 |
-| Last agent-green | 162 | 1 | 0 | 1.0 |
-| First agent-green | 150 | 13 | 0 | 0.0002 |
+| E4B | 72 | 9 | 9 | 0 |
+| 31B | 273 | 163 | 165 | 2 (0.7%) |
 
-For E4B every rule picks the same 9 resolved runs. The submitted patch is already the best choice a runtime rule can make: no rule gains a single run. Stopping at the first passing test run is significantly worse, because the agent's tests are a weak proxy. Of the 382 31B states at which an agent test command exited 0, **184 (48.2%, CI 43.2–53.2%) passed the hidden tests**; for E4B it is 7 of 24 (29.2%, CI 14.9–49.2%). Agents often test a scratch reproduction written to match their own understanding of the issue, so a green run says the agent's belief holds, not that the issue is fixed.
+E4B usually makes one change and submits it: the median run has a single version. A model that rarely revises cannot lose much by revising. 31B revises more, with a median of four versions, but lost a working fix in only 2 runs. The 95% interval runs from 0.2% to 2.6%, so even in the worst case, recovering every lost fix would add under three points.
 
-### 4.4 Most failures never reach a passing patch
+31B did break working versions 13 times in 12 runs. It repaired 11 of those breaks before the end, and 9 of the repairs were exact reverts to the earlier working version, usually within two tool calls. Six repairs came right after one of its checks failed. The model already runs a small undo loop of its own: edit, check, put it back.
 
-If fixes are rarely lost, failed runs must fail before any correct state exists. Figure 1 shows how far they got. 51% of failed 31B runs (56 of 110, CI 41.7–60.1%) edited the lines the reference patch changes (an overlap within three lines of the original file) and still never produced a passing version. This is close to the 60–69% Kim et al. [1] report for frontier models. For E4B the figure is 30% (19 of 63, CI 20.2–42.4%): its failures more often edit only other files (35%) or nothing at all (10%).
+![Figure 2: one of the two lost fixes, step by step](https://raw.githubusercontent.com/sundarshahi/gemma4-agents-rarely-lose-a-fix/main/paper/fig/fig2_lost_fix.png)
 
-![Figure 1](fig1_reach.png)
-*Figure 1. Failed runs grouped by the furthest point they reached, over all intermediate states. "Gold lines" means an agent edit overlapped the reference patch's changed lines within three lines.*
+Figure 2 shows one of the two lost fixes. At step 57 an edit makes the workspace work. At step 63, without testing in between, the agent edits a second method and breaks it. At step 65 it runs only its own scratch tests, which pass, and submits. The scratch check passed on a broken workspace, the same failure Section 4.1 measures. In the other lost fix, the agent's check failed after the break and the agent carried on anyway.
 
-## 5. Discussion
+### 4.4 Most failures never reach a working fix
 
-**For people building small agents.** Checkpoint-and-restore machinery has almost nothing to recover for Gemma 4 in this harness: zero lost fixes at E4B and 2 in 273 runs at 31B. The larger model already reverts its own breaks most of the time. The headroom is upstream. E4B's main problem is localization: 44% of its failures never edit the right file. 31B's is fix quality at the right place: half its failures sit on the right lines without a passing version. Rules that end a run early or select a state on the agent's own green test do harm, so a "stop when tests pass" heuristic should not be added without a better test signal. Asking the agent to reproduce the issue with the repository's real test suite, rather than a scratch script, is the obvious next experiment.
+If fixes are rarely lost, failed runs must fail before any working version exists. We checked how close they got by comparing every version with the lines the reference fix changes.
 
-**Relation to coherence collapse.** Kim et al. report coherence collapse as the largest theme among capable-model failures. In Gemma 4 it exists, as Figure 2 shows, but at most 2.6% of runs (upper CI bound) and usually self-corrected. One explanation consistent with our data is that the small model revises less: E4B makes one change, and 31B makes a median of four. The more an agent rewrites, the more chances it has to overwrite something good. Fewer revisions shift its failures to never reaching a fix.
+![Figure 3: where failed runs end up](https://raw.githubusercontent.com/sundarshahi/gemma4-agents-rarely-lose-a-fix/main/paper/fig/fig1_reach.png)
 
-**Limitations.**
+Half of the failed 31B runs (56 of 110) edited the right lines at some point and still never produced a working version, close to the 60–69% Kim et al. [1] report for frontier models. For E4B the share is 30% (19 of 63). E4B's failures more often never touch the right file (44%), so finding the right code is still its main problem.
 
-- Tasks come from two open-source libraries. The hidden test set comes from private repositories, and public-set results have been reported not to transfer [2].
-- The 31B data come from another team's 17 configurations, not the sample agent, and the live 31B run was stopped by the GPU quota. So the size comparison also differs in agent configuration and run budget.
-- Our "resolved" inherits the tests' blind spots. 14.7% of planted bugs pass them [2], so some "passing" states may be wrong too.
-- The replay drops 25 of 298 trajectories whose final diff we could not reproduce.
-- We measure states after mutating calls, not inside multi-command shell scripts.
-- "Agent-green" is defined by a test-runner pattern and misses reproduction scripts run with plain `python3`.
+## 5. What this means for building small agents
 
-## 6. Reproducibility
+1. **Make the agent confirm its fix with the repository's real tests.** Our measurements say a pass from the project's suite is right about twice as often as a pass from a scratch script. A prompt rule or a skill that runs the relevant `tests/` files before submitting is cheap to add. This is a measurement, not yet a controlled experiment, and testing it directly is the obvious next step.
+2. **Do not stop at the first green result.** Early stopping on the agent's own check cost 13 fixes and gained none.
+3. **Do not build checkpoint-and-undo machinery for Gemma 4 yet.** There is almost nothing for it to recover, and 31B already reverts its own breaks.
+4. **Spend effort on reaching a fix.** For E4B that means finding the right file; for 31B, writing a correct change at the right place.
 
-All code is in the GitHub repository and Kaggle notebooks linked below (Apache-2.0). Each step is a Kaggle kernel on the official harness: the live run with the observation hook, the replay, the validity audit and the state scoring. `results/` holds every per-state diff and verdict as derived labels; no competition data is redistributed. `python analysis/analyze.py results/` and `python analysis/reach.py results/ results/gold_hunks.json` print every number in this paper, and `analysis/figures.py` draws the figures. Both analysis scripts carry self-tests (`--selftest`).
+## 6. A new resource: scored agent states
 
-**Use of AI tools.** An AI assistant (Claude) helped write code and draft text. Every number was produced by the released scripts from the logged runs, and the author checked the analysis and the final text.
+Most agent datasets label only the final patch. We release 1,431 intermediate workspace states from 345 Gemma 4 runs, each with its diff, the tool call that produced it, the agent's check results at that moment, and a pass or fail label from the official hidden tests. These are process-level labels: they say, step by step, whether the agent's work was correct. That makes them usable for training or evaluating verifiers and step-level reward models for small coding agents, and for testing stopping and selection rules offline. We also release the observation hook, the log replayer and the verification notebooks, so the same labels can be produced for any agent in this harness. Following the hosts' guidance, only derived data is shared: no problem statements, hidden tests or competition files.
+
+## 7. Limitations
+
+- The tasks come from two open-source libraries. The hidden competition set uses private repositories, and public-set results have been reported not to transfer [2].
+- The 31B runs come from another team's 17 configurations, not the sample agent, so the size comparison also differs in agent setup and budget.
+- "Working" inherits the tests' blind spots: 14.7% of deliberately broken fixes still pass them [2].
+- The check comparison is observational. Repository-suite checks may happen later in a run.
+- We drop 25 of 298 logged runs whose final diff we could not rebuild exactly.
+
+## 8. Reproducibility
+
+Code, data and figures: https://github.com/sundarshahi/gemma4-agents-rarely-lose-a-fix (Apache-2.0). Each stage is a Kaggle notebook on the official harness: the live run with the observation hook, the log replay, the task audit, and the scoring. Three commands regenerate every number in this paper: `python analysis/analyze.py results/`, `python analysis/checks.py results/` and `python analysis/reach.py results/ results/gold_hunks.json`. The analysis scripts include self-tests.
+
+**Use of AI tools.** An AI assistant (Claude) helped write code and draft text. All numbers come from the released scripts, and the author checked the analysis and the final text.
 
 ## References
 
 [1] M. Kim, D. Wang, S. Cui, F. Farmahinifarahani, T. Y. Zhuo, S. Garg, B. Ray, R. Mukherjee, V. Kumar. *Coherence Collapse: Diagnosing Why Code Agents Fail After Reaching the Right Code.* arXiv:2603.24631, 2026.
+
 [2] M. Papasani. *gemma4-agentic-swe: audit, ablations and traces for Gemma 4 agents.* github.com/TechNaom/gemma4-agentic-swe, commit 0758ce1, 2026. Apache-2.0.
+
 [3] C. E. Jimenez, J. Yang, A. Wettig, S. Yao, K. Pei, O. Press, K. Narasimhan. *SWE-bench: Can Language Models Resolve Real-World GitHub Issues?* ICLR 2024. arXiv:2310.06770.
+
 [4] Gupta, Chaturvedi, Sengupta, Huan, Deoras. *Dissecting model behavior through agent trajectories.* arXiv:2606.17454, 2026.
+
 [5] A. Cuadron et al. *The Danger of Overthinking: Examining the Reasoning-Action Dilemma in Agentic Tasks.* arXiv:2502.08235, 2025.
+
 [6] A. Antoniades, A. Örwall, K. Zhang, Y. Xie, A. Goyal, W. Wang. *SWE-Search: Enhancing Software Agents with Monte Carlo Tree Search and Iterative Refinement.* ICLR 2025. arXiv:2410.20285.
+
 [7] C. S. Xia, Y. Deng, S. Dunn, L. Zhang. *Agentless: Demystifying LLM-based Software Engineering Agents.* arXiv:2407.01489, 2024.
+
 [8] R. Ehrlich, B. Brown, J. Juravsky, R. Clark, C. Ré, A. Mirhoseini. *CodeMonkeys: Scaling Test-Time Compute for Software Engineering.* arXiv:2501.14723, 2025.
+
 [9] Vein05. *Gemma 4 Gives Its Failing Patches Full Marks* (paper-track entry and code). github.com/Vein05/gemma4-paper-track, 2026.
+
 [10] pedronog8. *Pre-registration: edit-state loss at context compaction.* Kaggle discussion 756850, 2026.
+
 [11] sigongjoa. *Finds the File, Cannot Change It: Why a 2B Coding Agent Fails.* github.com/sigongjoa/gemma4-e2b-edit-failure, 2026.

@@ -91,3 +91,30 @@ ax.set_title('rich_3470, 31B: workspace state after each call (green = passes hi
 fig.tight_layout()
 fig.savefig(out / 'fig2_lost_fix.png', dpi=200)
 print('wrote', sorted(p.name for p in out.glob('*.png')))
+
+# ---- Figure 3: how often a passing agent check is right, by what the agent ran ----
+chk = json.load(open(root / 'checks.json'))
+rows = [('31B · repo test suite', chk['31B']['repo test suite'], C31),
+        ('31B · own scratch script', chk['31B']['own scratch script'], C31),
+        ('E4B · repo test suite', chk['E4B']['repo test suite'], CE4)]
+fig, ax = plt.subplots(figsize=(7.2, 2.4))
+for i, (lab, d, col) in enumerate(rows):
+    y = len(rows) - 1 - i
+    lo, hi = d['ci']
+    ax.barh(y, 100 * d['rate'], height=0.55, color=col)
+    ax.errorbar(100 * d['rate'], y, xerr=[[100 * (d['rate'] - lo)], [100 * (hi - d['rate'])]], fmt='none',
+                ecolor=INK2, capsize=3, lw=1)
+    ax.text(100 * hi + 1.5, y, f"{100 * d['rate']:.0f}%  ({d['hidden_pass']} of {d['checks']} passing checks)",
+            va='center', fontsize=8.5, color=INK)
+ax.set_yticks(range(len(rows)), [r[0] for r in rows][::-1])
+ax.set_xlim(0, 125)
+ax.set_xticks([0, 20, 40, 60, 80, 100])
+ax.set_xlabel('% of passing agent checks where the hidden tests also passed (95% CI)')
+ax.xaxis.grid(True, color=GRID, lw=0.8)
+ax.set_axisbelow(True)
+for s in ('top', 'right', 'left'):
+    ax.spines[s].set_visible(False)
+ax.set_title("When the agent's own check passes, is the fix really correct?", fontsize=10.5, color=INK, loc='left')
+fig.tight_layout()
+fig.savefig(out / 'fig3_checks.png', dpi=200)
+print('wrote fig3_checks.png')

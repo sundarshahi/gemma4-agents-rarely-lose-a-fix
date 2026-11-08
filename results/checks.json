@@ -1,0 +1,33 @@
+{
+ "E4B": {
+  "repo test suite": {
+   "checks": 24,
+   "hidden_pass": 7,
+   "rate": 0.292,
+   "ci": [
+    0.149,
+    0.492
+   ]
+  }
+ },
+ "31B": {
+  "own scratch script": {
+   "checks": 847,
+   "hidden_pass": 323,
+   "rate": 0.381,
+   "ci": [
+    0.349,
+    0.415
+   ]
+  },
+  "repo test suite": {
+   "checks": 95,
+   "hidden_pass": 65,
+   "rate": 0.684,
+   "ci": [
+    0.585,
+    0.769
+   ]
+  }
+ }
+}

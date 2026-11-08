@@ -1,0 +1,1 @@
+Scoring every intermediate step of 345 Gemma 4 coding-agent runs: agents rarely lose a fix, often trust a wrong one, and are right twice as often when they check with the repository's own tests
