@@ -114,9 +114,15 @@ If fixes are rarely lost, failed runs must fail before any working version exist
 
 Half of the failed 31B runs (56 of 110) edited the right lines at some point and still never produced a working version, close to the 60–69% Kim et al. [1] report for frontier models. For E4B the share is 30% (19 of 63). E4B's failures more often never touch the right file (44%), so finding the right code is still its main problem.
 
+### 4.5 A first live test on the hidden tasks
+
+We then tried the rule on the competition's hidden tasks. We took a published 31B agent configuration [12] and submitted it twice: once unchanged, and once with one added prompt line telling the agent to confirm its fix with the repository's existing test file rather than its own script. The unchanged agent scored 0.15 on the public leaderboard and the version with the rule scored 0.13. With about 60 tasks in the public split, that is a difference of roughly one task.
+
+This test cannot separate the rule from chance. The same configuration had been reported at 0.24, and for us it scored 0.15, so one submission varies by several tasks. The configuration's prompt also already asked the agent to run the repository's tests, so our line changed less than it seems. The sample E4B agent scored 0.05 on the hidden tasks, against 12.5% on our 72 public tasks, which supports the warning that public results do not transfer [2].
+
 ## 5. What this means for building small agents
 
-1. **Make the agent confirm its fix with the repository's real tests.** Our measurements say a pass from the project's suite is right about twice as often as a pass from a scratch script. A prompt rule or a skill that runs the relevant `tests/` files before submitting is cheap to add. This is a measurement, not yet a controlled experiment, and testing it directly is the obvious next step.
+1. **Make the agent confirm its fix with the repository's real tests.** Our measurements say a pass from the project's suite is right about twice as often as a pass from a scratch script. A prompt rule or a skill that runs the relevant `tests/` files before submitting is cheap to add. Our one live test (Section 4.5) was too small to show an effect either way, so a controlled test needs repeated runs, not single leaderboard submissions.
 2. **Do not stop at the first green result.** Early stopping on the agent's own check cost 13 fixes and gained none.
 3. **Do not build checkpoint-and-undo machinery for Gemma 4 yet.** There is almost nothing for it to recover, and 31B already reverts its own breaks.
 4. **Spend effort on reaching a fix.** For E4B that means finding the right file; for 31B, writing a correct change at the right place.
@@ -162,3 +168,5 @@ Paper PDF: https://doi.org/10.5281/zenodo.24050355. Code, data and figures: http
 [10] pedronog8. *Pre-registration: edit-state loss at context compaction.* Kaggle discussion 756850, 2026.
 
 [11] sigongjoa. *Finds the File, Cannot Change It: Why a 2B Coding Agent Fails.* github.com/sigongjoa/gemma4-e2b-edit-failure, 2026.
+
+[12] Hanh Tran. *Gemma 4 Baseline | LB 0.24.* Kaggle notebook honghanhhh/gemma-4-baseline-lb-0-24, 2026.
